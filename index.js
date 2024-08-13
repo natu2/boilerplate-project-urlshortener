@@ -47,61 +47,70 @@ app.get("/", function (req, res) {
   res.sendFile(process.cwd() + "/views/index.html");
 });
 
-app
-  .route("/api/shorturl")
-  .get((req, res, next) => {
-    res.send("Get request");
-    // respond with redirect to long url search by id
-    next();
-  })
-  .post(
-    (req, res, next) => {
-      //get user input from req body
-      let userInput = req.body.url;
+app.get("/api/shorturl/:shortened", (req, res) => {
+  url.findOne({ shortUrl: req.params.shortened }, (err, foundLongUrl) => {
+    if (err) return res.json({ "error ": "invalid url" });
+    if (foundLongUrl?.url) res.redirect(foundLongUrl.url);
+    else res.sendFile(process.cwd() + "/views/index.html");
+  });
+});
 
-      //TODO verify URL using given method
-      dns.lookup(userInput, (err, address, family) => {
-        if (err) {
-          return res.status(400).json({ "error ": "invalid url" });
+app.post(
+  "/api/shorturl",
+  (req, res, next) => {
+    //get user input from req body
+    let userInput = req.body.url;
+
+    //TODO verify URL using given method
+    dns.lookup(userInput, (err, address, family) => {
+      if (err) {
+        return res.json({ "error ": "invalid url" });
+      } else {
+        if (new String(userInput).substring(0, 8) === "https://")
+          req.validatedUrl = userInput;
+        else {
+          if (new String(userInput).substring(0, 4) === "www.")
+            req.validatedUrl = `https://${userInput}`;
+          else req.validatedUrl = `https://www.${userInput}`;
+        }
+        next();
+      }
+    });
+  },
+  (req, res) => {
+    let userInput = req.validatedUrl;
+    // Inserting URL into databse, only if it does not already exist
+    url.findOne(
+      { url: userInput },
+      { url: 1, shortUrl: 1 },
+      (err, foundUrl) => {
+        if (err) console.log(err);
+
+        if (foundUrl?.url && foundUrl?.shortUrl) {
+          res.send({
+            original_url: foundUrl["url"],
+            short_url: foundUrl["shortUrl"],
+          });
         } else {
-          next();
+          //creating and saving new db entry
+          let newUrl = new url({
+            url: userInput,
+            shortUrl: countCreated,
+          });
+          newUrl.save((err, data) => {
+            if (err) console.log(err);
+            countCreated += 1;
+          });
+          // sending new url as result
+          res.send({
+            orginial_url: newUrl["url"],
+            short_url: newUrl["shortUrl"],
+          });
         }
-      });
-    },
-    (req, res) => {
-      let userInput = req.body.url;
-      // Inserting URL into databse, only if it does not already exist
-      url.findOne(
-        { url: userInput },
-        { url: 1, shortUrl: 1 },
-        (err, foundUrl) => {
-          if (err) console.log(err);
-
-          if (foundUrl?.url && foundUrl?.shortUrl) {
-            res.send({
-              original_url: foundUrl["url"],
-              short_url: foundUrl["shortUrl"],
-            });
-          } else {
-            //creating and saving new db entry
-            let newUrl = new url({
-              url: userInput,
-              shortUrl: countCreated,
-            });
-            newUrl.save((err, data) => {
-              if (err) console.log(err);
-              countCreated += 1;
-            });
-            // sending new url as result
-            res.send({
-              orginial_url: newUrl["url"],
-              short_url: newUrl["shortUrl"],
-            });
-          }
-        }
-      );
-    }
-  );
+      }
+    );
+  }
+);
 
 app.listen(port, function () {
   console.log(`Listening on port ${port}`);
