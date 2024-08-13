@@ -45,12 +45,6 @@ app.get("/", function (req, res) {
   res.sendFile(process.cwd() + "/views/index.html");
 });
 
-let existingUrl = {};
-
-const setExistingUrl = (original_Url, short_Url) => {
-  existingUrl = { url: original_Url, shortUrl: short_Url };
-};
-
 app
   .route("/api/shorturl")
   .get((req, res, next) => {
@@ -59,49 +53,41 @@ app
     next();
   })
   .post((req, res) => {
-    // To return
-    let result = {};
+    //get user input from req body
+    let userInput = req.body.url;
 
     //TODO verify URL using given method
 
     // Inserting URL into databse, only if it does not already exist
-    //get user input from req body
-    let userInput = req.body.url;
-    // search to see if it already exists in the database
-    let doc = url.findOne(
+    url.findOne(
       { url: userInput },
       { url: 1, shortUrl: 1 },
       (err, foundUrl) => {
         if (err) console.log(err);
-        if (foundUrl) {
-          // need to set result and send in here
-          console.log(`${foundUrl["url"]} exists`);
-          setExistingUrl(foundUrl["url"], foundUrl["shortUrl"]);
+
+        if (foundUrl?.url && foundUrl?.shortUrl) {
+          res.send({
+            original_url: foundUrl["url"],
+            short_url: foundUrl["shortUrl"],
+          });
+        } else {
+          //creating and saving new db entry
+          let newUrl = new url({
+            url: userInput,
+            shortUrl: countCreated,
+          });
+          newUrl.save((err, data) => {
+            if (err) console.log(err);
+            countCreated += 1;
+          });
+          // sending new url as result
+          res.send({
+            orginial_url: newUrl["url"],
+            short_url: newUrl["shortUrl"],
+          });
         }
       }
     );
-    console.log(existingUrl);
-
-    // if it does, choose the existing short url instead of creating a new one.
-    if (existingUrl) {
-      result = {
-        orginial_url: "omg",
-        short_url: "like I cannot",
-      };
-      console.log(result);
-    } else {
-      let newUrl = new url({
-        url: userInput,
-        shortUrl: countCreated,
-      });
-      newUrl.save((err, data) => {
-        if (err) console.log(err);
-        countCreated += 1;
-      });
-      result = { orginial_url: newUrl["url"], short_url: newUrl["shortUrl"] };
-    }
-
-    res.send(result);
   });
 
 app.listen(port, function () {
