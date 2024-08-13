@@ -4,6 +4,8 @@ const cors = require("cors");
 const app = express();
 const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
+const dns = require("dns");
+const { error } = require("console");
 
 // Basic Configuration
 const port = process.env.PORT || 3000;
@@ -52,43 +54,54 @@ app
     // respond with redirect to long url search by id
     next();
   })
-  .post((req, res) => {
-    //get user input from req body
-    let userInput = req.body.url;
+  .post(
+    (req, res, next) => {
+      //get user input from req body
+      let userInput = req.body.url;
 
-    //TODO verify URL using given method
-
-    // Inserting URL into databse, only if it does not already exist
-    url.findOne(
-      { url: userInput },
-      { url: 1, shortUrl: 1 },
-      (err, foundUrl) => {
-        if (err) console.log(err);
-
-        if (foundUrl?.url && foundUrl?.shortUrl) {
-          res.send({
-            original_url: foundUrl["url"],
-            short_url: foundUrl["shortUrl"],
-          });
+      //TODO verify URL using given method
+      dns.lookup(userInput, (err, address, family) => {
+        if (err) {
+          return res.status(400).json({ "error ": "invalid url" });
         } else {
-          //creating and saving new db entry
-          let newUrl = new url({
-            url: userInput,
-            shortUrl: countCreated,
-          });
-          newUrl.save((err, data) => {
-            if (err) console.log(err);
-            countCreated += 1;
-          });
-          // sending new url as result
-          res.send({
-            orginial_url: newUrl["url"],
-            short_url: newUrl["shortUrl"],
-          });
+          next();
         }
-      }
-    );
-  });
+      });
+    },
+    (req, res) => {
+      let userInput = req.body.url;
+      // Inserting URL into databse, only if it does not already exist
+      url.findOne(
+        { url: userInput },
+        { url: 1, shortUrl: 1 },
+        (err, foundUrl) => {
+          if (err) console.log(err);
+
+          if (foundUrl?.url && foundUrl?.shortUrl) {
+            res.send({
+              original_url: foundUrl["url"],
+              short_url: foundUrl["shortUrl"],
+            });
+          } else {
+            //creating and saving new db entry
+            let newUrl = new url({
+              url: userInput,
+              shortUrl: countCreated,
+            });
+            newUrl.save((err, data) => {
+              if (err) console.log(err);
+              countCreated += 1;
+            });
+            // sending new url as result
+            res.send({
+              orginial_url: newUrl["url"],
+              short_url: newUrl["shortUrl"],
+            });
+          }
+        }
+      );
+    }
+  );
 
 app.listen(port, function () {
   console.log(`Listening on port ${port}`);
